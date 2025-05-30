@@ -1,41 +1,180 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash
 import subprocess
+import os
+import time
+from typing import List, Dict, Tuple, Optional
+from cron_descriptor import Options, ExpressionDescriptor
 
 app = Flask(__name__)
 
-def get_crontab_lines():
+# 常量定义
+PRESETS = {
+    "每分钟执行一次": "* * * * *",
+    "每5分钟执行一次": "*/5 * * * *",
+    "每小时执行一次": "0 * * * *",
+    "每天凌晨执行一次": "0 0 * * *"
+}
+SCRIPT_TYPES = {
+    "python": {"ext": ".py", "interpreter": "python"},
+    "shell": {"ext": ".sh", "interpreter": "sh"}
+}
+SCRIPT_DIR = "scripts"
+
+
+def get_crontab_lines() -> List[str]:
+    """获取当前用户的crontab内容"""
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    if result.returncode != 0:
-        return []
-    return result.stdout.strip().split("\n")
+    return result.stdout.strip().split("\n") if result.returncode == 0 else []
+
+
+def save_crontab(lines: List[str]) -> bool:
+    """保存crontab内容"""
+    result = subprocess.run(
+        ["crontab", "-"],
+        input="\n".join(lines) + "\n",
+        text=True,
+        capture_output=True
+    )
+    return result.returncode == 0
+
+
+def create_script(script_type: str, content: str) -> Tuple[str, str]:
+    """创建脚本文件并返回(脚本路径, 执行命令)"""
+    os.makedirs(SCRIPT_DIR, exist_ok=True)
+    script_name = f"task_{int(time.time() * 1000)}"
+    script_ext = SCRIPT_TYPES[script_type]["ext"]
+    script_path = os.path.join(SCRIPT_DIR, f"{script_name}{script_ext}")
+
+    with open(script_path, "w") as f:
+        if script_type == "shell":
+            f.write("#!/bin/bash\n")
+        f.write(content)
+
+    if script_type == "shell":
+        os.chmod(script_path, 0o755)
+
+    interpreter = SCRIPT_TYPES[script_type]["interpreter"]
+    return script_path, f"{interpreter} {script_path}"
+
+
+def parse_cron_task(task: str) -> Optional[Tuple[str, str]]:
+    """解析cron任务为(时间表达式, 命令)"""
+    parts = task.strip().split()
+    return " ".join(parts[:5]), " ".join(parts[5:]) if len(parts) >= 6 else None
+
+
+def get_script_content(script_path: str) -> str:
+    """读取脚本内容并移除shebang行"""
+    try:
+        if not os.path.isabs(script_path):
+            script_path = os.path.join(os.getcwd(), script_path)
+
+        with open(script_path, "r") as f:
+            content = f.read()
+            return content[content.find("\n") + 1:].strip() if content.startswith("#!") else content.strip()
+    except Exception as e:
+        print(f"Error reading script: {e}")
+        return f"# 无法读取原始脚本\n# 错误: {str(e)}"
+
+
+def get_preset(schedule: str) -> str:
+    """根据时间表达式返回匹配的预设key"""
+    inverted_presets = {v: k for k, v in PRESETS.items()}
+    return inverted_presets.get(schedule, "")
+
 
 @app.route("/")
 def index():
-    lines = get_crontab_lines()
-    return render_template("index.html", tasks=lines)
+    return render_template("index.html", tasks=get_crontab_lines())
+
 
 @app.route("/add", methods=["GET", "POST"])
 def add():
     if request.method == "POST":
         schedule = request.form["schedule"]
-        command = request.form["command"]
-        new_line = f"{schedule} {command}"
+        script_type = request.form["script_type"]
+        script_content = request.form["script_content"]
+
+        _, command = create_script(script_type, script_content)
         lines = get_crontab_lines()
-        lines.append(new_line)
-        joined = "\n".join(lines) + "\n"
-        subprocess.run(["crontab", "-"], input=joined, text=True)
+        lines.append(f"{schedule} {command}")
+
+        if not save_crontab(lines):
+            flash("保存crontab失败", "error")
         return redirect(url_for("index"))
-    return render_template("add.html")
+
+    return render_template("add.html", presets=PRESETS)
+
 
 @app.route("/delete/<int:task_id>")
 def delete(task_id):
     lines = get_crontab_lines()
     if 0 <= task_id < len(lines):
+        task_info = parse_cron_task(lines[task_id])
+        if task_info:
+            _, command = task_info
+            script_path = command.split()[1]  # 获取脚本路径
+            try:
+                os.remove(script_path)  # 删除脚本文件
+            except Exception as e:
+                print(f"Error deleting script file: {e}")
+                flash("删除脚本文件失败", "error")
         del lines[task_id]
-        new_crontab = "\n".join(lines) + "\n" if lines else ""
-        subprocess.run(["crontab", "-"], input=new_crontab, text=True)
+        if not save_crontab(lines):
+            flash("删除任务失败", "error")
     return redirect(url_for("index"))
+
+
+@app.route("/edit/<int:task_id>", methods=["GET", "POST"])
+def edit(task_id):
+    lines = get_crontab_lines()
+    if not (0 <= task_id < len(lines)):
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        schedule = request.form["schedule"]
+        script_type = request.form["script_type"]
+        script_content = request.form["script_content"]
+
+        _, command = create_script(script_type, script_content)
+        lines[task_id] = f"{schedule} {command}"
+
+        if not save_crontab(lines):
+            flash("更新任务失败", "error")
+        return redirect(url_for("index"))
+
+    # 解析现有任务
+    task_info = parse_cron_task(lines[task_id])
+    if not task_info:
+        flash("任务格式无效", "error")
+        return redirect(url_for("index"))
+
+    schedule, command = task_info
+    script_type = "python" if command.startswith("python ") else "shell"
+    script_path = command[7:] if script_type == "python" else command[3:]
+    script_content = get_script_content(script_path)
+
+    return render_template(
+        "edit.html",
+        presets=PRESETS,
+        schedule=schedule,
+        script_content=script_content,
+        script_type=script_type,
+        selected_preset=get_preset(schedule)
+    )
+
+
+@app.route("/get_description")
+def get_description_route():
+    cron = request.args.get('cron', '')
+    try:
+        options = Options()
+        options.locale_code = "zh_CN"
+        return str(ExpressionDescriptor(cron, options))
+    except Exception as e:
+        print(f"Error parsing cron expression {cron}: {e}")
+        return "无效的 Crontab 表达式"
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-

@@ -13,13 +13,37 @@
           <div class="card-body">
             <h4 class="card-title mb-4">添加新的定时任务</h4>
             <form method="POST">
+              <!-- <div class="mb-3">
+                <label class="form-label">任务名称</label>
+                <input type="text" name="task_name" class="form-control" placeholder="请输入任务名称" required>
+              </div> -->
               <div class="mb-3">
-                <label class="form-label">时间表达式 (crontab 格式)</label>
-                <input type="text" name="schedule" class="form-control" placeholder="*/5 * * * *" required>
+                <label class="form-label">时间表达式预设</label>
+                <select class="form-select" id="preset" onchange="updateCron()">
+                  <option value="">请选择预设</option>
+                  {% for name, cron in presets.items() %}
+                  <option value="{{ cron }}">{{ name }}</option>
+                  {% endfor %}
+                </select>
               </div>
               <div class="mb-3">
-                <label class="form-label">Shell 命令</label>
-                <input type="text" name="command" class="form-control" placeholder="echo hello >> /sdcard/log.txt" required>
+                <label class="form-label">时间表达式 (crontab 格式)</label>
+                <input type="text" name="schedule" id="schedule" class="form-control" placeholder="*/5 * * * *" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" id="description">时间描述</label>
+                <input type="text" id="description-input" class="form-control" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">脚本类型</label>
+                <select class="form-select" name="script_type">
+                  <option value="python">Python 脚本</option>
+                  <option value="shell">Shell 脚本</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">脚本内容</label>
+                <textarea name="script_content" class="form-control" rows="5" placeholder="输入脚本内容" required></textarea>
               </div>
               <button type="submit" class="btn btn-primary w-100">添加任务</button>
               <a href="{{ url_for('index') }}" class="btn btn-link mt-2">← 返回任务列表</a>
@@ -29,6 +53,48 @@
       </div>
     </div>
   </div>
+  <script>
+    function updateCron() {
+      var preset = document.getElementById('preset');
+      var schedule = document.getElementById('schedule');
+      var descriptionInput = document.getElementById('description-input');
+      var selectedCron = preset.value;
+      schedule.value = selectedCron;
+      if (selectedCron) {
+        // 发送请求获取时间描述
+        fetch('/get_description?cron=' + encodeURIComponent(selectedCron))
+          .then(response => response.text())
+          .then(data => {
+            // 更新时间描述输入框
+            descriptionInput.value = data;
+          })
+          .catch(error => {
+            console.error('Error fetching description:', error);
+            descriptionInput.value = '无效的 Crontab 表达式';
+          });
+      } else {
+        descriptionInput.value = '';
+      }
+    }
+    document.getElementById('schedule').addEventListener('input', function() {
+      var schedule = this.value;
+      var descriptionInput = document.getElementById('description-input');
+      if (schedule) {
+        // 发送请求获取时间描述
+        fetch('/get_description?cron=' + encodeURIComponent(schedule))
+          .then(response => response.text())
+          .then(data => {
+            // 更新时间描述输入框
+            descriptionInput.value = data;
+          })
+          .catch(error => {
+            console.error('Error fetching description:', error);
+            descriptionInput.value = '无效的 Crontab 表达式';
+          });
+      } else {
+        descriptionInput.value = '';
+      }
+    });
+  </script>
 </body>
 </html>
-

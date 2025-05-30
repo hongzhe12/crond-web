@@ -14,7 +14,7 @@
         <tr>
           <th>#</th>
           <th>任务内容</th>
-          <th style="width: 100px;">操作</th>
+          <th style="width: 200px;">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -23,6 +23,8 @@
           <td class="text-muted">{{ loop.index0 }}</td>
           <td><code>{{ task }}</code></td>
           <td>
+            <a href="{{ url_for('edit', task_id=loop.index0) }}"
+               class="btn btn-sm btn-outline-warning">修改</a>
             <a href="{{ url_for('delete', task_id=loop.index0) }}"
                class="btn btn-sm btn-outline-danger"
                onclick="return confirm('确认删除此任务？')">删除</a>
@@ -38,4 +40,3 @@
   </div>
 </body>
 </html>
-

@@ -6,6 +6,7 @@ from typing import List, Dict, Tuple, Optional
 from cron_descriptor import Options, ExpressionDescriptor
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # 用于flash消息
 
 # 常量定义
 PRESETS = {
@@ -19,6 +20,9 @@ SCRIPT_TYPES = {
     "shell": {"ext": ".sh", "interpreter": "sh"}
 }
 SCRIPT_DIR = "scripts"
+
+os.makedirs(SCRIPT_DIR, exist_ok=True)
+
 
 
 def get_crontab_lines() -> List[str]:
@@ -40,15 +44,15 @@ def save_crontab(lines: List[str]) -> bool:
 
 def create_script(script_type: str, content: str) -> Tuple[str, str]:
     """创建脚本文件并返回(脚本路径, 执行命令)"""
-    os.makedirs(SCRIPT_DIR, exist_ok=True)
     script_name = f"task_{int(time.time() * 1000)}"
     script_ext = SCRIPT_TYPES[script_type]["ext"]
-    script_path = os.path.join(SCRIPT_DIR, f"{script_name}{script_ext}")
+    script_path = os.path.abspath(os.path.join(SCRIPT_DIR, f"{script_name}{script_ext}"))
 
     with open(script_path, "w") as f:
         if script_type == "shell":
-            f.write("#!/bin/bash\n")
-        f.write(content)
+            f.write(f"#!/bin/bash\n{content}")
+        else:
+            f.write(content)
 
     if script_type == "shell":
         os.chmod(script_path, 0o755)
@@ -66,9 +70,7 @@ def parse_cron_task(task: str) -> Optional[Tuple[str, str]]:
 def get_script_content(script_path: str) -> str:
     """读取脚本内容并移除shebang行"""
     try:
-        if not os.path.isabs(script_path):
-            script_path = os.path.join(os.getcwd(), script_path)
-
+        script_path = os.path.abspath(script_path)
         with open(script_path, "r") as f:
             content = f.read()
             return content[content.find("\n") + 1:].strip() if content.startswith("#!") else content.strip()
@@ -116,9 +118,13 @@ def delete(task_id):
             script_path = command.split()[1]  # 获取脚本路径
             try:
                 os.remove(script_path)  # 删除脚本文件
+                # 删除对应的日志文件
+                log_path = get_log_path(script_path)
+                if os.path.exists(log_path):
+                    os.remove(log_path)
             except Exception as e:
-                print(f"Error deleting script file: {e}")
-                flash("删除脚本文件失败", "error")
+                print(f"Error deleting files: {e}")
+                flash("删除相关文件失败", "error")
         del lines[task_id]
         if not save_crontab(lines):
             flash("删除任务失败", "error")
@@ -162,7 +168,6 @@ def edit(task_id):
         script_type=script_type,
         selected_preset=get_preset(schedule)
     )
-
 
 @app.route("/get_description")
 def get_description_route():

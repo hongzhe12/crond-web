@@ -82,11 +82,10 @@ def create_script(script_type: str, content: str) -> Tuple[str, str]:
     script_ext = SCRIPT_TYPES[script_type]["ext"]
     script_path = os.path.abspath(os.path.join(SCRIPT_DIR, f"{script_name}{script_ext}"))
 
-    with open(script_path, "w") as f:
-        if script_type == "shell":
-            f.write(content)
-        else:
-            f.write(content)
+    # 使用二进制模式写入，避免系统自动转换换行符
+    with open(script_path, "wb") as f:
+        # 将内容编码为字节流，确保换行符保持原始状态
+        f.write(content.encode('utf-8'))
 
     if script_type == "shell":
         os.chmod(script_path, 0o755)

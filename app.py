@@ -84,7 +84,7 @@ def create_script(script_type: str, content: str) -> Tuple[str, str]:
 
     with open(script_path, "w") as f:
         if script_type == "shell":
-            f.write(f"#!/bin/bash\n{content}")
+            f.write(content)
         else:
             f.write(content)
 

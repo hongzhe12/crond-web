@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- 添加视口设置 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>修改任务</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h4 class="card-title mb-4">修改定时任务</h4>
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label class="form-label">时间表达式预设</label>
+                                <!-- 时间表达式预设选择框 -->
+                                <select class="form-select" id="preset" onchange="updateCron()">
+                                    <option value="">请选择预设</option>
+                                    {% for name, cron in presets.items() %}
+                                    <option value="{{ cron }}" {% if cron==schedule %}selected{% endif %}>
+                                        {{ name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">时间表达式 (crontab 格式)</label>
+                                <!-- 时间表达式输入框 -->
+                                <input type="text" name="schedule" id="schedule" class="form-control"
+                                    value="{{ schedule }}" required>
+                            </div>
+
+                            <!-- 时间描述 -->
+                            <div class="mb-3">
+                                <label class="form-label" id="description">时间描述</label>
+                                <input type="text" id="description-input" class="form-control" readonly>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">脚本类型</label>
+                                <!-- 脚本类型选择框 -->
+                                <select class="form-select" name="script_type">
+                                    <option value="python" {% if script_type=='python' %}selected{% endif %}>
+                                        Python 脚本
+                                    </option>
+                                    <option value="shell" {% if script_type=='shell' %}selected{% endif %}>
+                                        Shell 脚本
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">脚本内容</label>
+                                <textarea name="script_content" class="form-control" rows="5" placeholder="输入脚本内容"
+                                    required>{{ script_content }}</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">保存修改</button>
+                            <a href="{{ url_for('index') }}" class="btn btn-link mt-2">← 返回任务列表</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 在表单底部添加 -->
+    {% if original_command %}
+    <div class="mt-4 text-muted small">
+        <p class="mb-1">调试信息：</p>
+        <code>原始命令: {{ original_command }}</code>
+    </div>
+    {% endif %}
+
+    <script>
+
+        function updateCron() {
+            var preset = document.getElementById('preset');
+            var schedule = document.getElementById('schedule');
+            var descriptionInput = document.getElementById('description-input');
+            var selectedCron = preset.value;
+            schedule.value = selectedCron;
+            if (selectedCron) {
+                // 发送请求获取时间描述
+                fetch('/get_description?cron=' + encodeURIComponent(selectedCron))
+                   .then(response => response.text())
+                   .then(data => {
+                        // 更新时间描述输入框
+                        descriptionInput.value = data;
+                    })
+                   .catch(error => {
+                        console.error('Error fetching description:', error);
+                        descriptionInput.value = '无效的 Crontab 表达式';
+                    });
+            } else {
+                descriptionInput.value = '';
+            }
+        }
+        document.getElementById('schedule').addEventListener('input', function () {
+            var schedule = this.value;
+            var descriptionInput = document.getElementById('description-input');
+            if (schedule) {
+                // 发送请求获取时间描述
+                fetch('/get_description?cron=' + encodeURIComponent(schedule))
+                   .then(response => response.text())
+                   .then(data => {
+                        // 更新时间描述输入框
+                        descriptionInput.value = data;
+                    })
+                   .catch(error => {
+                        console.error('Error fetching description:', error);
+                        descriptionInput.value = '无效的 Crontab 表达式';
+                    });
+            } else {
+                descriptionInput.value = '';
+            }
+        });
+
+
+        // 页面加载完成后立即更新描述
+        document.addEventListener('DOMContentLoaded', function () {
+            updateCron();  // 调用已有的更新函数
+        });
+    </script>
+
+
+</body>
+
+</html>

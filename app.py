@@ -59,7 +59,7 @@ def get_crontab_lines() -> List[str]:
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
     context = result.stdout.strip().split("\n")
     context = list(map(lambda x: x.strip(), context))  # 去除每行的前后空格
-    if result.returncode == 0 and context!=['']:
+    if result.returncode == 0 and context != ['']:
         return context
     else:
         return []
@@ -84,7 +84,7 @@ def create_script(script_type: str, content: str) -> Tuple[str, str]:
 
     # 统一换行符为Unix格式
     normalized_content = content.replace('\r\n', '\n').replace('\r', '\n')
-    
+
     # 使用二进制模式写入
     with open(script_path, "wb") as f:
         f.write(normalized_content.encode('utf-8'))
@@ -203,6 +203,7 @@ def edit(task_id):
         script_type=script_type,
         selected_preset=get_preset(schedule)
     )
+
 
 @app.route("/get_description")
 def get_description_route():

@@ -85,7 +85,7 @@ python app.py
 
 ## 八、贡献方式
 如需参与开发，可通过以下步骤：  
-1. 克隆仓库：`git clone https://github.com/your-username/cron-manager.git`  
+1. 克隆仓库：`git clone https://github.com/hongzhe12/cron-manager.git`  
 2. 创建开发分支：`git checkout -b feature/log-system`  
 3. 提交代码并发起Pull Request  
 
